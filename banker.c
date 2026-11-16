@@ -329,14 +329,52 @@ int main(int argc, char *argv[]) {
     int linha = 1;
 
     while ((resultadoLeitura = lerComando(arquivoComandos, &comando, &clienteComando, quantidades, tiposDeRecurso, quantidadeClientes)) == 1) {
+
+        if (comando == '*') {
+            escreverEstado(resultado, maximum, allocation, need, available, tiposDeRecurso, quantidadeClientes);
+        } else if (comando == 'L') {
+            size_t inicio = (size_t)clienteComando * tiposDeRecurso;
+            int devolucaoValida = 1;
+
+            for (int recurso = 0; recurso < tiposDeRecurso; recurso++) {
+                size_t posicao = inicio + recurso;
+
+                if (quantidades[recurso] > allocation[posicao]) {
+                    devolucaoValida = 0;
+                    break;
+                }
+            }
+
+            if (devolucaoValida == 1) {
+                for (int recurso = 0; recurso < tiposDeRecurso; recurso++) {
+                    size_t posicao = inicio + recurso;
+                    int quantidade = quantidades[recurso];
+
+                    available[recurso] += quantidade;
+                    allocation[posicao] -= quantidade;
+                    need[posicao] += quantidade;
+                }
+
+                fprintf(resultado, "Release from customer %d the resources",
+                        clienteComando);
+                for (int recurso = 0; recurso < tiposDeRecurso; recurso++) {
+                    fprintf(resultado, " %d", quantidades[recurso]);
+                }
+                fprintf(resultado, "\n");
+            } else {
+                fprintf(resultado, "Customer %d cannot release more resources than allocated\n", clienteComando);
+            }
+        }
+
         linha++;
     }
 
+    fclose(resultado);
     fclose(arquivoComandos);
     free(quantidades);
 
     if (resultadoLeitura == -1) {
-        fprintf(stderr, "Erro ao ler a linha %d de commands.txt.\n", linha);
+        printf("Erro ao ler a linha %d de commands.txt.\n", linha);
         free(need);
         free(allocation);
         free(maximum);

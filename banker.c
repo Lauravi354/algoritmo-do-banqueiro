@@ -142,6 +142,66 @@ void escreverEstado(FILE *resultado, int *maximum, int *allocation, int *need, i
     fprintf(resultado, "\n");
 }
 
+int estadoSeguro(int *available, int *allocation, int *need, int tiposDeRecurso, size_t quantidadeClientes){
+    int *recursosLivres = calloc(tiposDeRecurso, sizeof(int));
+    int *terminou = calloc(quantidadeClientes, sizeof(int));
+
+    if (recursosLivres == NULL || terminou == NULL) {
+        free(recursosLivres);
+        free(terminou);
+        return -1;
+    }
+
+    for (int recurso = 0; recurso < tiposDeRecurso; recurso++) {
+        recursosLivres[recurso] = available[recurso];
+    }
+
+    size_t clientesTerminados = 0;
+
+    while (clientesTerminados < quantidadeClientes) {
+        int houveProgresso = 0;
+
+        for (size_t cliente = 0; cliente < quantidadeClientes; cliente++) {
+            if (terminou[cliente] == 1) {
+                continue;
+            }
+
+            size_t inicio = cliente * tiposDeRecurso;
+            int podeTerminar = 1;
+
+            for (int recurso = 0; recurso < tiposDeRecurso; recurso++) {
+                if (need[inicio + recurso] > recursosLivres[recurso]) {
+                    podeTerminar = 0;
+                    break;
+                }
+            }
+
+            if (podeTerminar == 1) {
+                for (int recurso = 0; recurso < tiposDeRecurso; recurso++) {
+                    recursosLivres[recurso] += allocation[inicio + recurso];
+                }
+
+                terminou[cliente] = 1;
+                clientesTerminados++;
+                houveProgresso = 1;
+            }
+        }
+
+        if (houveProgresso == 0) {
+            break;
+        }
+    }
+
+    free(recursosLivres);
+    free(terminou);
+
+    if (clientesTerminados == quantidadeClientes) {
+        return 1;
+    }
+
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
 
     int tiposDeRecurso = argc - 1;

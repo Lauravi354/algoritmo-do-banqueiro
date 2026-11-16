@@ -426,6 +426,98 @@ int main(int argc, char *argv[]) {
             }
         }
 
+            else if (comando == 'Q') {
+            size_t inicio = (size_t)clienteComando * tiposDeRecurso;
+            int dentroDoLimite = 1;
+            int temRecursos = 1;
+
+            for (int recurso = 0; recurso < tiposDeRecurso; recurso++) {
+                if (quantidades[recurso] > need[inicio + recurso]) {
+                    dentroDoLimite = 0;
+                }
+
+                if (quantidades[recurso] > available[recurso]) {
+                    temRecursos = 0;
+                }
+            }
+
+            if (dentroDoLimite == 0) {
+                fprintf(resultado, "The customer %d request", clienteComando);
+
+                for (int recurso = 0; recurso < tiposDeRecurso; recurso++) {
+                    fprintf(resultado, " %d", quantidades[recurso]);
+                }
+
+                fprintf(resultado, " was denied because exceed its maximum allocation\n");
+            } else if (temRecursos == 0) {
+                fprintf(resultado, "The resources");
+
+                for (int recurso = 0; recurso < tiposDeRecurso; recurso++) {
+                    fprintf(resultado, " %d", available[recurso]);
+                }
+
+                fprintf(resultado, " are not enough to customer %d request", clienteComando);
+
+                for (int recurso = 0; recurso < tiposDeRecurso; recurso++) {
+                    fprintf(resultado, " %d", quantidades[recurso]);
+                }
+
+                fprintf(resultado, "\n");
+            } else {
+                for (int recurso = 0; recurso < tiposDeRecurso; recurso++) {
+                    size_t posicao = inicio + recurso;
+                    int quantidade = quantidades[recurso];
+
+                    available[recurso] -= quantidade;
+                    allocation[posicao] += quantidade;
+                    need[posicao] -= quantidade;
+                }
+
+                int seguro = estadoSeguro(available, allocation, need,
+                                          tiposDeRecurso, quantidadeClientes);
+
+                if (seguro != 1) {
+                    for (int recurso = 0; recurso < tiposDeRecurso; recurso++) {
+                        size_t posicao = inicio + recurso;
+                        int quantidade = quantidades[recurso];
+
+                        available[recurso] += quantidade;
+                        allocation[posicao] -= quantidade;
+                        need[posicao] += quantidade;
+                    }
+                }
+
+                if (seguro == -1) {
+                    printf("Não foi possível verificar o estado seguro.\n");
+                    fclose(resultado);
+                    fclose(arquivoComandos);
+                    free(quantidades);
+                    free(need);
+                    free(allocation);
+                    free(maximum);
+                    free(available);
+                    return 1;
+                }
+
+                if (seguro == 1) {
+                    fprintf(resultado, "Allocate to customer %d the resources",
+                            clienteComando);
+                } else {
+                    fprintf(resultado, "The customer %d request", clienteComando);
+                }
+
+                for (int recurso = 0; recurso < tiposDeRecurso; recurso++) {
+                    fprintf(resultado, " %d", quantidades[recurso]);
+                }
+
+                if (seguro == 1) {
+                    fprintf(resultado, "\n");
+                } else {
+                    fprintf(resultado, " was denied because result in an unsafe state\n");
+                }
+            }
+        }
+
         linha++;
     }
 

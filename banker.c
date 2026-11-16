@@ -2,8 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int lerQuantidade(FILE *arquivo, int *valor, int *separador){
-    int caractere = fgetc(arquivo);
+int lerQuantidade(FILE *arquivo, int caractere, int *valor, int *separador){
     int numero = 0;
 
     if (caractere < '0' || caractere > '9') {
@@ -24,6 +23,123 @@ int lerQuantidade(FILE *arquivo, int *valor, int *separador){
     *valor = numero;
     *separador = caractere;
     return 1;
+}
+
+int pularEspacos(FILE *arquivo, int caractere)
+{
+    while (caractere == ' ' || caractere == '\t') {
+        caractere = fgetc(arquivo);
+    }
+
+    return caractere;
+}
+
+int lerComando(FILE *arquivo, char *comando, int *cliente, int *quantidades, int tiposDeRecurso, size_t quantidadeClientes){
+    int caractere = fgetc(arquivo);
+
+    if (caractere == EOF) {
+        if (feof(arquivo) != 0) {
+            return 0;
+        }
+
+        return -1;
+    }
+
+    caractere = pularEspacos(arquivo, caractere);
+
+    if (caractere == '*') {
+        *comando = '*';
+        caractere = fgetc(arquivo);
+    } else {
+        if (caractere != 'R') {
+            return -1;
+        }
+
+        int letra = fgetc(arquivo);
+
+        if (letra != 'Q' && letra != 'L') {
+            return -1;
+        }
+
+        *comando = letra;
+        caractere = fgetc(arquivo);
+
+        for (int i = 0; i <= tiposDeRecurso; i++) {
+            if (caractere != ' ' && caractere != '\t') {
+                return -1;
+            }
+
+            caractere = pularEspacos(arquivo, caractere);
+
+            if (caractere < '0' || caractere > '9') {
+                return -1;
+            }
+
+            int valor;
+            if (lerQuantidade(arquivo, caractere, &valor, &caractere) == 0) {
+                return -1;
+            }
+
+            if (i == 0) {
+                if ((size_t)valor >= quantidadeClientes) {
+                    return -1;
+                }
+                *cliente = valor;
+            } else {
+                quantidades[i - 1] = valor;
+            }
+        }
+    }
+
+    caractere = pularEspacos(arquivo, caractere);
+
+    if (caractere == '\r') {
+        caractere = fgetc(arquivo);
+        if (caractere != '\n') {
+            return -1;
+        }
+    }
+
+    if (caractere == '\n' || (caractere == EOF && feof(arquivo) != 0)) {
+        return 1;
+    }
+
+    return -1;
+}
+
+void escreverEstado(FILE *resultado, int *maximum, int *allocation, int *need, int *available, int tiposDeRecurso, size_t quantidadeClientes) {
+    fprintf(resultado, "MAXIMUM   |   ALLOCATION  |   NEED\n");
+
+    for (size_t cliente = 0; cliente < quantidadeClientes; cliente++) {
+        size_t inicio = cliente * tiposDeRecurso;
+
+        for (int recurso = 0; recurso < tiposDeRecurso; recurso++) {
+            fprintf(resultado, "%d ", maximum[inicio + recurso]);
+        }
+
+        fprintf(resultado, "    |   ");
+
+        for (int recurso = 0; recurso < tiposDeRecurso; recurso++) {
+            fprintf(resultado, "%d ", allocation[inicio + recurso]);
+        }
+
+        fprintf(resultado, "      |   ");
+
+        for (int recurso = 0; recurso < tiposDeRecurso; recurso++) {
+            if (recurso > 0) {
+                fprintf(resultado, " ");
+            }
+            fprintf(resultado, "%d", need[inicio + recurso]);
+        }
+
+        fprintf(resultado, "\n");
+    }
+
+    fprintf(resultado, "AVAILABLE");
+    for (int recurso = 0; recurso < tiposDeRecurso; recurso++) {
+        fprintf(resultado, " %d", available[recurso]);
+    }
+    fprintf(resultado, "\n");
 }
 
 int main(int argc, char *argv[]) {
@@ -47,7 +163,7 @@ int main(int argc, char *argv[]) {
         int quantidade = 0;
         int valido = texto[0] != '\0';
 
-        for (size_t j = 0; texto[j] != '\0'; j++) {
+        for (int j = 0; texto[j] != '\0'; j++) {
             if (texto[j] < '0' || texto[j] > '9') {
                 valido = 0;
                 break;
@@ -133,7 +249,9 @@ int main(int argc, char *argv[]) {
         for (int recurso = 0; recurso < tiposDeRecurso; recurso++) {
             size_t posicao = cliente * tiposDeRecurso + recurso;
             int separador = 0;
-            int numeroValido = lerQuantidade(arquivo, &maximum[posicao], &separador);
+            int primeiroCaractere = fgetc(arquivo);
+            int numeroValido = lerQuantidade(arquivo, primeiroCaractere,
+                                             &maximum[posicao], &separador);
 
             int separadorValido;
             if (recurso == tiposDeRecurso - 1) {
@@ -157,12 +275,84 @@ int main(int argc, char *argv[]) {
 
     fclose(arquivo);
 
+    int *allocation = calloc(quantidadeClientes, tamanhoLinha);
+    int *need = calloc(quantidadeClientes, tamanhoLinha);
+
+    if (allocation == NULL || need == NULL) {
+        fprintf(stderr, "Erro ao reservar memória para as matrizes.\n");
+        free(need);
+        free(allocation);
+        free(maximum);
+        free(available);
+        return 1;
+    }
+
+    for (size_t cliente = 0; cliente < quantidadeClientes; cliente++) {
+        for (int recurso = 0; recurso < tiposDeRecurso; recurso++) {
+            size_t posicao = cliente * tiposDeRecurso + recurso;
+            need[posicao] = maximum[posicao];
+        }
+    }
+
+        FILE *arquivoComandos = fopen("commands.txt", "r");
+    int *quantidades = calloc(tiposDeRecurso, sizeof(int));
+
+    if (arquivoComandos == NULL || quantidades == NULL) {
+        fprintf(stderr, "Não foi possível preparar a leitura de commands.txt.\n");
+        if (arquivoComandos != NULL) {
+            fclose(arquivoComandos);
+        }
+        free(quantidades);
+        free(need);
+        free(allocation);
+        free(maximum);
+        free(available);
+        return 1;
+    }
+
+    FILE *resultado = fopen("result.txt", "w");
+
+    if (resultado == NULL) {
+        printf("Não foi possível criar result.txt.\n");
+        fclose(arquivoComandos);
+        free(quantidades);
+        free(need);
+        free(allocation);
+        free(maximum);
+        free(available);
+        return 1;
+    }
+
+    char comando;
+    int clienteComando;
+    int resultadoLeitura;
+    int linha = 1;
+
+    while ((resultadoLeitura = lerComando(arquivoComandos, &comando, &clienteComando, quantidades, tiposDeRecurso, quantidadeClientes)) == 1) {
+        linha++;
+    }
+
+    fclose(arquivoComandos);
+    free(quantidades);
+
+    if (resultadoLeitura == -1) {
+        fprintf(stderr, "Erro ao ler a linha %d de commands.txt.\n", linha);
+        free(need);
+        free(allocation);
+        free(maximum);
+        free(available);
+        return 1;
+    }
+    
     printf("AVAILABLE");
     for (int i = 0; i < tiposDeRecurso; i++) {
         printf(" %d", available[i]);
     }
     printf("\n");
 
+    free(need);
+    free(allocation);
+    free(maximum);
     free(available);
     return 0;
 }
